@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+# fail fast
+set -e
+
+# debug
+# set -x
+
+shopt -s extglob
+
+function error() {
+  echo " !     $*" >&2
+  exit 1
+}
+
+function indent() {
+  c='s/^/       /'
+  case $(uname) in
+    Darwin) sed -l "$c";;
+    *)      sed -u "$c";;
+  esac
+}
+
+function package_download() {
+  url="$1"
+  location="$2"
+
+  mkdir -p $location
+  curl $url --location -s -o - | tar xzf - -C $location
+}
+
+# clean up leaking environment
+unset GIT_DIR
+
+# parse and derive params
+BUILD_DIR=$1
+CACHE_DIR="$2/vendor"
+COMPILE_BUILDPACK_DIR=$(cd $(dirname $0) && cd .. && pwd)
+BUILDPACK_DIR="$(dirname $(dirname $0))"
+echo "BUILD_DIR: $BUILD_DIR" | indent
+echo "COMPILE_BUILDPACK_DIR: $COMPILE_BUILDPACK_DIR" | indent
+echo "BUILDPACK_DIR: $BUILDPACK_DIR" | indent
+
+mkdir -p $CACHE_DIR
+echo "Created CACHE_DIR: $CACHE_DIR" | indent
+
+# config
+R_VERSION="3.0.2"
+BUILD_PACK_VERSION="20140218-0019"
+
+S3_BUCKET="heroku-buildpack-r"
+R_BINARIES="http://${S3_BUCKET}.s3.amazonaws.com/R-${R_VERSION}-binaries-${BUILD_PACK_VERSION}.tar.gz"
+echo "R_BINARIES: $R_BINARIES" | indent
+
+VENDOR_DIR="$BUILD_DIR/vendor"
+R_BASE="$VENDOR_DIR/R"
+CRAN_MIRROR="http://cran.revolutionanalytics.com"
+
+REPOSITORY_ROOT="download.pivotal.io.s3.amazonaws.com"
+JDK_VERSION="1.7.0_51"
+#JDK="openjdk-${JDK_VERSION}"
+JDK="jdk${JDK_VERSION}"
+PLATFORM="lucid"
+ARCH="x86_64"
+#JDK_URL="http://${REPOSITORY_ROOT}/openjdk/${PLATFORM}/${ARCH}/${JDK}.tar.gz"
+JDK_URL="http://s3-us-west-2.amazonaws.com/java-r-buildpack/jdk-7u51-linux-i586.tar.gz"
+echo "hema changes"
+echo "JDK_URL: $JDK_URL" | indent
+JAVA_HOME_TEMP="$VENDOR_DIR/$JDK"
+#: ${JAVA_HOME=}
+#: ${JAVA_CPPFLAGS=~autodetect~}
+#: ${JAVA_LD_LIBRARY_PATH=~autodetect~}
+#: ${JAVA_LIBS=~autodetect~}
+
+echo "Downloading and unpacking $JDK into '$VENDOR_DIR'" | indent
+package_download "${JDK_URL}" "${VENDOR_DIR}"
+#wget "${JDK_URL}" --no-check-certificate
+#mkdir -p $JAVA_HOME_TEMP
+#mv jdk-7u51-linux-x64.tar.gz "${JAVA_HOME_TEMP}"
+#tar xzf "${JAVA_HOME_TEMP}/jdk-7u51-linux-x64.tar.gz"
+#rm "${JAVA_HOME_TEMP}/jdk-7u51-linux-x64.tar.gz"
+
+echo "JAVA_HOME_TEMP: $JAVA_HOME_TEMP" | indent
+#export JAVA_HOME="/app/vendor/${JDK}"
+export JAVA_HOME=$JAVA_HOME_TEMP
+echo "JAVA_HOME: $JAVA_HOME" | indent
+export JAVA_CPPFLAGS="-I$JAVA_HOME/include -I$JAVA_HOME/include/linux"
+echo "JAVA_CPPFLAGS: $JAVA_CPPFLAGS" | indent
+
+#mkdir -p $JAVA_HOME
+#echo "Copying vendored ${JAVA_HOME_TEMP} files into ${JAVA_HOME}" | indent
+#cp -R $JAVA_HOME_TEMP/* $JAVA_HOME
+
+#if [ -f "/usr/bin/java" ]; then
+#     echo "Java found on path" | indent
+#else
+    #ln -fs $JAVA_HOME/bin/java /usr/bin/java
+#fi
+
+# vendor R into the slug
+echo "Vendoring R $R_VERSION" | indent
+
+# download and unpack binaries
+echo "Downloading and unpacking R binaries into '$VENDOR_DIR'" | indent
+package_download "${R_BINARIES}" "${VENDOR_DIR}"
+
+# need to copy the binaries to /app/vendor so that R works
+mkdir -p /app/vendor/gcc
+echo "Copying gcc files into /app/vendor/gcc" | indent
+cp -R $VENDOR_DIR/gcc/* /app/vendor/gcc
+
+mkdir -p /app/vendor/glibc
+echo "Copying glibc files into /app/vendor/glibc" | indent
+cp -R $VENDOR_DIR/glibc/* /app/vendor/glibc
+
+mkdir -p /app/vendor/gsl
+echo "Copying gsl files into /app/vendor/gsl" | indent
+cp -R $VENDOR_DIR/gsl/* /app/vendor/gsl
+
+mkdir -p /app/vendor/R
+echo "Copying R files into /app/vendor/R" | indent
+cp -R $VENDOR_DIR/R/* /app/vendor/R
+
+# HACK: need to copy over the gcc libs so that packages can find them
+mkdir -p /app/vendor/R/lib64/R/lib
+echo "Copying lib64 files into /app/vendor/R/lib64/R/lib" | indent
+cp /app/vendor/gcc/lib64/* /app/vendor/R/lib64/R/lib
+
+# R needs to know where gfortran and glibc header files are
+export PATH="$JAVA_HOME/bin:/app/vendor/R/bin:/app/vendor/gcc/bin:$PATH"
+echo "PATH set to '$PATH'" | indent
+
+export LDFLAGS="-L/app/vendor/gcc/lib64 -L/app/vendor/gsl/lib"
+export CPPFLAGS="-I/app/vendor/glibc/string -I/app/vendor/glibc/time -I/app/vendor/gsl/include"
+export PKG_LDFLAGS=$LDFLAGS
+export PKG_CPPFLAGS=$CPPFLAGS
+
+export R_HOME=$R_BASE/lib64/R
+export R_INCLUDE=$R_HOME/include
+echo "R_HOME set to '$R_HOME'" | indent
+echo "R_INCLUDE set to '$R_INCLUDE'" | indent
+
+# hack for libreadline shared library version
+#cd /lib
+#ln -n ./libreadline.so.6 libreadline.so.5
+
+# copy over 'r' environment
+mkdir -p $BUILD_DIR/.profile.d
+echo "Copying $BUILDPACK_DIR/bin/r_environment.sh to $BUILD_DIR/.profile.d/r_environment.sh" | indent
+cp "$BUILDPACK_DIR/bin/r_environment.sh" $BUILD_DIR/.profile.d/r_environment.sh
+
+# copy over setup environment
+if [ -f "$BUILD_DIR/config/setup.sh" ]; then
+    echo "Copying $BUILD_DIR/config/setup.sh to $BUILD_DIR/.profile.d/setup.sh" | indent
+    cp "$BUILD_DIR/config/setup.sh" $BUILD_DIR/.profile.d/setup.sh
+fi
+
+# prevent warnings when building packages
+mkdir -p /app/vendor/R/lib64/R/doc/html
+touch /app/vendor/R/lib64/R/doc/html/R.css
+
+# install dependencies from CRAN
+echo "Executing init.r script" | indent
+
+# set the CRAN mirror and run the init.r program
+/app/vendor/R/bin/R -s <<RPROG > indent
+  Sys.setenv(BUILD_DIR="$BUILD_DIR")
+  Sys.setenv(JAVA_HOME="$JAVA_HOME")
+  Sys.setenv(JAVA_CPPFLAGS="$JAVA_CPPFLAGS")
+  setwd("$BUILD_DIR")
+  r <- getOption("repos");
+  r["CRAN"] <- "$CRAN_MIRROR";
+  options(repos=r);
+  `cat $BUILD_DIR/init.r`
+RPROG
+
+echo "R $R_VERSION successfully installed" | indent
+
+# need to copy binaries back so that any installed packages are included in the slug
+cp -R /app/vendor/R/* $VENDOR_DIR/R
+#cp -R /app/vendor/$JDK/* $VENDOR_DIR/$JDK
+
+# setup rjava
+echo "Calling R CMD javareconf" | indent
+#/app/vendor/${JDK}/bin/java -version
+echo "PATH set to '$PATH'" | indent
+R CMD javareconf

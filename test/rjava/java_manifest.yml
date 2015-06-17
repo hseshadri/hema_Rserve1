@@ -1,0 +1,9 @@
+---
+env:
+  JBP_LOG_LEVEL DEBUG: "DEBUG"
+applications:
+- name: java2r-app-dkjdfkad
+  memory: 512M
+  instances: 1
+  path:  target/rjava-app-0.0.1-SNAPSHOT.jar
+  buildpack: https://github.com/malston/java-buildpack.git#java_main
