@@ -65,6 +65,7 @@ PLATFORM="lucid"
 ARCH="x86_64"
 #JDK_URL="http://${REPOSITORY_ROOT}/openjdk/${PLATFORM}/${ARCH}/${JDK}.tar.gz"
 JDK_URL="http://s3-us-west-2.amazonaws.com/java-r-buildpack/jdk-7u51-linux-i586.tar.gz"
+JDK_URL="http://download.pivotal.io.s3.amazonaws.com/openjdk/lucid/x86_64/openjdk-1.7.0_51.tar.gz"
 echo "hema changes"
 echo "JDK_URL: $JDK_URL" | indent
 JAVA_HOME_TEMP="$VENDOR_DIR/$JDK"
