@@ -52,6 +52,7 @@ BUILD_PACK_VERSION="20140218-0019"
 S3_BUCKET="heroku-buildpack-r"
 R_BINARIES="http://${S3_BUCKET}.s3.amazonaws.com/R-${R_VERSION}-binaries-${BUILD_PACK_VERSION}.tar.gz"
 echo "R_BINARIES: $R_BINARIES" | indent
+echo "hema changes"
 
 VENDOR_DIR="$BUILD_DIR/vendor"
 R_BASE="$VENDOR_DIR/R"
@@ -63,8 +64,8 @@ JDK_VERSION="1.7.0_51"
 JDK="jdk${JDK_VERSION}"
 PLATFORM="lucid"
 ARCH="x86_64"
-#JDK_URL="http://${REPOSITORY_ROOT}/openjdk/${PLATFORM}/${ARCH}/${JDK}.tar.gz"
-JDK_URL="http://download.pivotal.io.s3.amazonaws.com/openjdk/lucid/x86_64/openjdk-1.7.0_51.tar.gz"
+JDK_URL="http://${REPOSITORY_ROOT}/openjdk/${PLATFORM}/${ARCH}/${JDK}.tar.gz"
+
 echo "hema changes"
 echo "JDK_URL: $JDK_URL" | indent
 JAVA_HOME_TEMP="$VENDOR_DIR/$JDK"
